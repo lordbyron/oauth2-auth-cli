@@ -14,14 +14,21 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
+func Authorize(conf *oauth2.Config) (*oauth2.Token, error) {
+	o := Oauth2CLI{
+		Conf: conf,
+	}
+	return o.Authorize()
+}
+
 type Oauth2CLI struct {
-	log  *logrus.Logger
+	Log  *logrus.Logger
 	Conf *oauth2.Config
 }
 
 func (o *Oauth2CLI) init() {
-	if o.log == nil {
-		o.log = logrus.StandardLogger()
+	if o.Log == nil {
+		o.Log = logrus.StandardLogger()
 	}
 }
 
@@ -33,14 +40,14 @@ func (o *Oauth2CLI) Authorize() (*oauth2.Token, error) {
 	state := rndm.String(8)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token, err := o.handle(w, r, state)
+		token, err := o.handle(r, state)
 		if err != nil {
 			errorC <- err
-			http.Redirect(w, r, "failure", http.StatusOK)
+			fmt.Fprintf(w, renderError(err))
 			return
 		}
 		successC <- token
-		http.Redirect(w, r, "success", http.StatusOK)
+		fmt.Fprintf(w, renderSuccess())
 	})
 
 	server := httptest.NewServer(handler)
@@ -55,18 +62,18 @@ func (o *Oauth2CLI) Authorize() (*oauth2.Token, error) {
 
 	select {
 	case err := <-errorC:
-		o.log.Errorf("Error in callback: %v", err)
+		o.Log.Errorf("Error in callback: %v", err)
 		return nil, err
 	case token := <-successC:
-		o.log.Info("Successfully exchanged for Access Token")
+		o.Log.Info("Successfully exchanged for Access Token")
 		return token, nil
 	case <-time.After(60 * time.Second):
-		o.log.Error("Timed out waiting for callback")
+		o.Log.Error("Timed out waiting for callback")
 		return nil, errors.New("Timed out waiting for callback")
 	}
 }
 
-func (o *Oauth2CLI) handle(w http.ResponseWriter, r *http.Request, expectedState string) (*oauth2.Token, error) {
+func (o *Oauth2CLI) handle(r *http.Request, expectedState string) (*oauth2.Token, error) {
 	if r.URL.Path != "/callback" {
 		return nil, errors.New("callback has incorrect path. should be `/callback`")
 	}
@@ -84,4 +91,19 @@ func (o *Oauth2CLI) handle(w http.ResponseWriter, r *http.Request, expectedState
 	}
 	oauth2.RegisterBrokenAuthHeaderProvider(o.Conf.Endpoint.TokenURL)
 	return o.Conf.Exchange(context.Background(), code)
+}
+
+func renderSuccess() string {
+	return `
+	<div style="height:100px; width:100%!; display:flex; flex-direction: column; justify-content: center; align-items:center; background-color:#2ecc71; color:white; font-size:22"><div>Success!</div></div>
+		<p style="margin-top:20px; font-size:18; text-align:center">You are authenticated, you can now return to the program. This will auto-close</p>
+		<script>window.onload=function(){setTimeout(this.close, 4000)}</script>
+	`
+}
+
+func renderError(e error) string {
+	return `
+	<div style="height:100px; width:100%!; display:flex; flex-direction: column; justify-content: center; align-items:center; background-color:#ee2c21; color:white; font-size:22"><div>Failure</div></div>
+	<p style="margin-top:20px; font-size:18; text-align:center">Authentication failed after receiving callback. Error: ` + e.Error() + `</p>
+	`
 }

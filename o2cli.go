@@ -56,9 +56,9 @@ func (o *Oauth2CLI) Authorize() (*oauth2.Token, error) {
 	o.Conf.RedirectURL = fmt.Sprintf("%s%s", server.URL, "/callback")
 	url := o.Conf.AuthCodeURL(state)
 
-	o.Log.Infof("If browser window does not open automatically, open it by clicking on the link:\n %s\n", url)
+	o.Log.Infof("If browser window does not open automatically, open it by clicking on the link:\n %s", url)
 	open.Run(url)
-	o.Log.Infof("Waiting for response on: %s\n", server.URL)
+	o.Log.Infof("Waiting for response on: %s", server.URL)
 
 	select {
 	case err := <-errorC:

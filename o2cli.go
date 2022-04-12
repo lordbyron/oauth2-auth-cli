@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/oauth2"
 	"net/http"
-	"net/http/httptest"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"golang.org/x/oauth2"
+
 	rndm "github.com/nmrshll/rndm-go"
+	"github.com/sirupsen/logrus"
 	"github.com/skratchdot/open-golang/open"
 )
 
@@ -50,15 +50,19 @@ func (o *Oauth2CLI) Authorize() (*oauth2.Token, error) {
 		fmt.Fprintf(w, renderSuccess())
 	})
 
-	server := httptest.NewServer(handler)
-	defer server.Close()
+	host := "http://127.0.0.1"
+	port := ":62955"
+	callback := "/callback"
 
-	o.Conf.RedirectURL = fmt.Sprintf("%s%s", server.URL, "/callback")
+	http.HandleFunc(callback, handler)
+	go http.ListenAndServe(port, nil)
+
+	o.Conf.RedirectURL = fmt.Sprintf("%s%s%s", host, port, callback)
 	url := o.Conf.AuthCodeURL(state)
 
 	o.Log.Infof("If browser window does not open automatically, open it by clicking on the link:\n %s", url)
 	open.Run(url)
-	o.Log.Infof("Waiting for response on: %s", server.URL)
+	o.Log.Infof("Waiting for response on: %s", o.Conf.RedirectURL)
 
 	select {
 	case err := <-errorC:
